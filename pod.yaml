@@ -2,9 +2,9 @@
 
 # first launch EC2 / Create EKS-nodes 
 #login into eks
----
+```` 
 aws eks update-kubeconfig --name <ekscluster-name>
----
+```` 
 # Check nodes on server 
 ---
 kubectl get nodes
