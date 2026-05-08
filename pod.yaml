@@ -1,0 +1,42 @@
+## Pod creation Steps 
+# first launch EC2 / Create EKS-nodes 
+#login into eks
+---
+aws eks update-kubeconfig --name <ekscluster-name>
+---
+# Check nodes on server 
+---
+kubectl get nodes
+---
+# Add pod.yaml file
+---
+apiVersion: v1
+kind: Pod
+
+metadata:
+  name: my-pod
+  labels:
+    app: nginx
+
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest
+      ports:
+        - containerPort: 80
+---
+
+# Apply the file 
+---
+kubectl apply -f pod.yaml
+---
+
+# check the pod is created or not
+---
+kubectl get pods
+---
+# check pod logs
+---
+kubectl logs my-pod
+kubectl describe pod my-pod
+---
