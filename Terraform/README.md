@@ -619,3 +619,110 @@ output "instance_id" {
   value = aws_instance.this.id
 }
 ```
+# Multi-Environment Terraform (.tfvars)
+You keep one set of Terraform code (resources, modules, variables) and switch values (CIDRs, sizes, tags, etc.) via per-environment .tfvars files. That way you don’t duplicate code—only the inputs change.
+```bash
+ec2-multi-env/
+├─ main.tf
+├─ variables.tf
+├─ env/
+│  ├─ dev.tfvars
+│  ├─ stage.tfvars
+│  └─ prod.tfvars
+```
+
+## create project root
+```sh
+mkdir ec2-multi-env
+cd ec2-multi-env
+```
+## create terraform files
+```sh
+touch main.tf variables.tf
+```
+## Create Environment Directory
+```sh
+mkdir env
+```
+## Create Environment .tfvars Files
+```sh
+touch env/dev.tfvars env/stage.tfvars env/prod.tfvars
+```
+---
+### main.tf
+```hcl
+provider "aws" {
+  region = var.aws_region
+}
+
+resource "aws_instance" "my_ec2" {
+  ami           = var.ami_id
+  instance_type = var.instance_type
+
+  tags = {
+    Name = "ec2-${var.environment}"
+    Env  = var.environment
+  }
+}
+```
+### variables.tf
+```
+variable "instance_type" {
+  description = "EC2 instance type"
+  type        = string
+}
+
+variable "environment" {
+  description = "Environment name (dev, stage, prod)"
+  type        = string
+}
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+}
+
+variable "ami_id" {
+  description = "AMI ID"
+  type        = string
+}
+```
+## Environment-specific .tfvars
+### env/dev.tfvars
+```hcl
+environment   = "dev"
+aws_region    = "us-east-1"
+ami_id        = "ami-08c40ec9ead489470"
+instance_type = "t2.micro"
+```
+### env/stage.tfvars
+```hcl
+environment   = "stage"
+aws_region    = "us-east-1"
+ami_id        = "ami-08c40ec9ead489470"
+instance_type = "t3.small"
+```
+### env/prod.tfvars
+```hcl
+environment   = "prod"
+aws_region    = "us-east-1"
+ami_id        = "ami-08c40ec9ead489470"
+instance_type = "t3.medium"
+```
+## Terraform Commands
+```sh
+terraform init
+```
+### deploy DEV
+```sh
+terraform apply -var-file="env/dev.tfvars"
+```
+### deploy stage
+```sh
+terraform apply -var-file="env/stage.tfvars"
+```
+### deploy prod
+```sh
+terraform apply -var-file="env/prod.tfvars"
+```
+---
