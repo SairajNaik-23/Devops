@@ -726,3 +726,60 @@ terraform apply -var-file="env/stage.tfvars"
 terraform apply -var-file="env/prod.tfvars"
 ```
 ---
+### EKS Creation Using Terraform 
+---
+provider "aws" {
+    region = "ap-south-1"
+}
+
+resource "aws_iam_role" "cluster" {
+  name = "eks-cluster-example"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "sts:AssumeRole",
+          "sts:TagSession"
+        ]
+        Effect = "Allow"
+        Principal = {
+          Service = "eks.amazonaws.com"
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "cluster_AmazonEKSClusterPolicy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+  role       = aws_iam_role.cluster.name
+}
+
+
+data "aws_vpc" "default" {
+    default = true
+}
+data "aws_subnet" "default"{
+    filter {
+        name = "vpc-id"
+        values = [data.aws_subnet.ids]
+    }
+}
+
+resource "aws_eks_cluster" "cluster" {
+    name = "cluster"
+    role_arn = aws_iam_role.cluster.arn
+    access_config {
+        authentication_mode = "API"
+    }
+    version  = "1.35"
+
+    vpc_config {
+        subnet_ids = data.aws_subnet.default.ids
+    }
+    depends_on = [
+    aws_iam_role_policy_attachment.cluster_AmazonEKSClusterPolicy,
+  ]
+}
+---
