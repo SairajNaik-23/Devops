@@ -726,4 +726,374 @@ terraform apply -var-file="env/stage.tfvars"
 terraform apply -var-file="env/prod.tfvars"
 ```
 ---
+---
+# Terraform Workspace 
 
+##  Objective
+To understand how **Terraform Workspaces** work by creating the **same resource** in **different workspaces**, where only the **state file and resource name change**.
+
+---
+
+##  Concept Recap 
+
+- Terraform workspaces allow you to use **one Terraform configuration**
+- Each workspace has its **own state file**
+- Resources are **separate**, even though code is the same
+- `terraform.workspace` gives the **current workspace name**
+
+---
+
+## Step 1: Create Project Directory
+
+```bash
+mkdir terraform-workspace-demo
+cd terraform-workspace-demo
+```
+## Step 2: Create Terraform File
+```sh
+touch main.tf
+```
+## Step 3: Add Terraform Configuration (main.tf)
+```hcl
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_s3_bucket" "example" {
+  bucket = "example-bucket-${terraform.workspace}"
+  acl    = "private"
+
+  tags = {
+    Name = "workspace-demo"
+  }
+}
+```
+Explanation - 
+- ${terraform.workspace} automatically picks the active workspace name
+- Each workspace creates a different S3 bucket
+- Same code → different bucket names
+
+## Step 4: Initialize Terraform
+```sh
+terraform init
+```
+## Step 5: Check Existing Workspaces
+```sh
+terraform workspace list
+```
+## Step 6: Create New Workspaces
+```sh
+terraform workspace new dev
+terraform workspace new stage
+terraform workspace new prod
+```
+## Step 7: Switch Between Workspaces
+```sh
+terraform workspace select <workspace_name>
+```
+## terraform workspace select <workspace_name>
+```sh
+terraform workspace select dev
+terraform apply
+```
+---
+# Difference Between Terraform Modules, .tfvars, and Workspaces
+
+| Aspect | Modules | .tfvars | Workspaces |
+|------|--------|---------|-----------|
+| What it is | A way to organize and reuse Terraform code | A file used to provide variable values | A mechanism to maintain separate state files |
+| Primary purpose | Avoid code duplication | Change configuration values without changing code | Isolate Terraform state |
+| Affects Terraform code | Yes | No | No |
+| Affects variable values | No | Yes | No |
+| Affects state file | No | No | Yes |
+| Reusability | High – same module can be used multiple times | Not reusable code, only values | Not reusable, only state separation |
+| Typical use case | Large or repeated infrastructure components | Different configurations for dev, stage, prod | Logical separation of infrastructure states |
+| Common examples | VPC module, EC2 module, RDS module | instance_type, region, CIDR blocks | default, dev, test |
+| Recommended for production | Yes | Yes | Limited (use carefully) |
+| Learning curve | Medium | Easy | Easy to Medium |
+| Mental model | Code structure | Configuration values | State management |
+
+## One-Line Summary
+
+- Modules define how infrastructure is built.
+- .tfvars define what values are used.
+- Workspaces define where Terraform stores its state.
+---
+## Terraform Loops
+Terraform provides powerful constructs for iterating over collections like `list` and `map`. The primary looping mechanisms are `count`, `for_each`, and `for`.
+
+### 1. `count`
+- **Definition**: The `count` parameter allows you to specify how many instances of a resource to create.
+- **Usage**: Works well for creating identical resources.
+
+#### Example:
+```hcl
+resource "aws_instance" "example" {
+  count         = 3
+  ami           = "ami-12345678"
+  instance_type = "t2.micro"
+}
+```
+In this example, three EC2 instances are created.
+
+#### Accessing Instances:
+```hcl
+aws_instance.example[0]  # First instance
+aws_instance.example[1]  # Second instance
+aws_instance.example[2]  # Third instance
+```
+
+### 2. `for_each`
+- **Definition**: The `for_each` meta-argument allows iterating over `map` or `set` types to create resources with distinct properties.
+- **Usage**: Useful when resource properties vary.
+
+#### Example:
+```hcl
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_s3_bucket" "example" {
+  for_each = {
+    dev  = "dev-bucket-unique-1"
+    prod = "prod-bucket-unique-2"
+  }
+
+  bucket = each.value
+}
+
+
+
+```
+This creates two S3 buckets: `dev-bucket` and `prod-bucket`.
+
+#### Accessing Instances:
+```hcl
+aws_s3_bucket.example["dev"]  # Dev bucket
+aws_s3_bucket.example["prod"] # Prod bucket
+```
+
+### 3. `for`
+- **Definition**: The `for` expression is used to transform or filter collections.
+- **Usage**: Commonly used in variables and outputs.
+
+#### Example:
+```hcl
+variable "names" {
+  default = ["Alice", "Bob", "Charlie"]
+}
+
+output "uppercase_names" {
+  value = [for name in var.names : upper(name)]
+}
+```
+This outputs the names in uppercase: `["ALICE", "BOB", "CHARLIE"]`.
+
+#### Filtering with `for`:
+```hcl
+output "filtered_names" {
+  value = [for name in var.names : name if length(name) > 3]
+}
+```
+This filters names longer than three characters.
+
+---
+
+## Comparison Table
+| Feature      | `count`                  | `for_each`                  | `for`                    |
+|--------------|--------------------------|-----------------------------|--------------------------|
+| Input Type   | Number                   | Map or Set                  | List, Map, or Set        |
+| Use Case     | Create identical items   | Create unique items         | Transform or filter data |
+| Example      | EC2 instances            | S3 buckets with unique IDs  | Modify list of names     |
+
+---
+## Example
+```hcl
+# Define the AWS provider
+provider "aws" {
+  region = "ap-south-1"   
+}
+
+# Create an EC2 instance
+resource "aws_instance" "my_ec2" {
+  for_each = toset(var.ami_ids)
+  ami = each.value
+  instance_type = "t3.micro"
+
+#  count = 3
+  tags = {
+    Name = "MyFirstEC2"
+  }
+}
+
+variable "ami_ids" {
+    default = ["ami-07a00cf47dbbc844c", "ami-0685bcc683dadb6b9"]
+    type = list(string)
+}
+
+output "public_ip" {
+    value = { for instance in aws_instance.my_ec2: instance.id => instance.arn }
+}
+
+variable "names" {
+  default = ["Alice", "Bob", "Charlie"]
+}
+
+output "uppercase_names" {
+  value = [for name in var.names : upper(name)]
+}
+```
+---
+# Terraform Commands and Provisioners
+
+## Terraform Commands
+
+### 1. **Taint Command**
+The `taint` command marks a resource for recreation during the next `terraform apply`. This is useful when a specific resource needs to be replaced without altering the rest of the infrastructure.
+
+#### **Syntax:**
+```bash
+terraform taint <resource_name>
+```
+
+#### **Example:**
+```bash
+terraform taint aws_instance.my_instance
+```
+This marks the `aws_instance.my_instance` resource for recreation.
+
+---
+
+### 2. **Import Command**
+The `import` command allows importing existing infrastructure resources into Terraform state. This is helpful when managing resources created outside of Terraform.
+
+#### **Syntax:**
+```bash
+terraform import <resource_type>.<resource_name> <resource_id>
+```
+
+#### **Example:**
+```bash
+terraform import aws_instance.my_instance i-0abcd1234efgh5678
+```
+This imports the AWS EC2 instance with ID `i-0abcd1234efgh5678` into Terraform as `aws_instance.my_instance`.
+
+---
+
+### 3. **Destroy Command**
+The `destroy` command removes all resources defined in the configuration.
+
+#### **Targeted Destroy (-t)**
+You can destroy specific resources using the `-target` flag.
+
+#### **Syntax:**
+```bash
+terraform destroy -target=<resource_type>.<resource_name>
+```
+
+#### **Example:**
+```bash
+terraform destroy -target=aws_instance.my_instance
+```
+This removes only the `aws_instance.my_instance` resource.
+
+---
+## terraform provision blocks
+```hcl
+# Define the AWS provider
+provider "aws" {
+  region = "us-east-1"   
+}
+
+# Create an EC2 instance
+resource "aws_instance" "my_ec2" {
+  ami           = "ami-0ecb62995f68bb549" 
+  instance_type = "t3.micro"  
+  key_name = "nv" 
+
+
+  provisioner "local-exec" {
+    command = "touch abc.txt"            
+  }
+  provisioner "file" {
+  source      = "apache2.sh"
+  destination = "/home/ubuntu/apache2.sh"
+  }
+  connection {
+    type     = "ssh"
+    user     = "ubuntu"
+    private_key = file("nv")
+    host     = self.public_ip
+  }
+    provisioner "remote-exec" {
+    inline = [
+        "bash /home/ubuntu/apache2.sh",
+        "touch remote.txt"
+    ]
+  }
+  tags = {
+    Name = "MyFirstEC2"
+  }
+}
+```
+## EKS Cluster Through Terraform
+
+#role
+#VPC
+#Subnet
+```hcl
+provider "aws" {
+    region = "ap-south-1"
+}
+
+resource "aws_iam_role" "cluster" {
+  name = "eks-cluster-example"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "sts:AssumeRole",
+          "sts:TagSession"
+        ]
+        Effect = "Allow"
+        Principal = {
+          Service = "eks.amazonaws.com"
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "cluster_AmazonEKSClusterPolicy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+  role       = aws_iam_role.cluster.name
+}
+
+
+data "aws_vpc" "default" {
+    default = true
+}
+data "aws_subnets" "default"{
+    filter {
+        name = "vpc-id"
+        values = [data.aws_vpc.default.id]
+    }
+}
+
+resource "aws_eks_cluster" "cluster" {
+    name = "cluster"
+    role_arn = aws_iam_role.cluster.arn
+    access_config {
+        authentication_mode = "API"
+    }
+    version  = "1.34"
+
+    vpc_config {
+        subnet_ids = data.aws_subnets.default.ids
+    }
+    depends_on = [
+    aws_iam_role_policy_attachment.cluster_AmazonEKSClusterPolicy
+  ]
+}
+```
